@@ -1,0 +1,319 @@
+---
+title: "The Sopranos Episodes You Should Just Skip"
+output: github_document
+---
+
+
+
+```{r libraries, include=FALSE}
+library(tidyverse)
+library(ggrepel)
+library(extrafont)
+library(car)
+```
+
+
+```{r functions, include=FALSE}
+nyt_theme <- function() {
+  theme_bw() +   
+  theme(
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks = element_blank(),
+
+        panel.grid.major.y = element_line(color = "#E2E2E2", size= .25),
+        
+        plot.title=element_text(vjust=1.25,hjust=.5),
+        axis.title.x=element_text(vjust=0),
+        axis.title.y=element_text(vjust=1.25)
+       ) 
+}
+
+xfree_theme <- function() {
+  theme(
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank()
+        )  
+}
+
+#stretches (or squashes) sequence in vector, 
+#so that last value is first value plus 12
+stretchit <- function(x) {
+  #makes a sequence from 1:13 the length of given vector
+  temp<-seq(from=1,
+            to=13,
+            length.out=length(x))
+  
+  #shift it to starting value of given vector 
+  distance<-x[1]-temp[1]
+  temp<-temp+distance
+  
+  return(temp)
+}
+```
+
+
+```{r font imports, include=FALSE}
+#https://stackoverflow.com/questions/34522732/changing-fonts-in-ggplot2
+#uncomment next line. just run one time on your system to import fonts from specified folder to R folder
+#if you want to import from your windows folder just do font_import()
+font_import(path="C:/Users/Fred/Dropbox/fonts")
+loadfonts(device = "win")
+```
+
+
+
+```{r read, include=FALSE}
+thesopranos <- read_csv("thesopranos.csv")
+thesopranos$sequential <- 1:length(thesopranos$Season)
+
+#seasons 6.1 and 6.2 have different #s of episodes than other seasons. this spaces them out to they are the same width as the other seasons when plotting
+thesopranos$sequential.spaced <- thesopranos$sequential
+thesopranos[(thesopranos$Season==6.2)&(thesopranos$Episode==13),]$sequential.spaced<-79
+thesopranos[(thesopranos$Season==6.1),]$sequential.spaced<-stretchit(thesopranos[(thesopranos$Season==6.1),]$sequential.spaced)
+thesopranos[(thesopranos$Season==6.2),]$sequential.spaced<-stretchit(thesopranos[(thesopranos$Season==6.2),]$sequential.spaced)
+
+thesopranos$Season <- as.factor(thesopranos$Season)
+thesopranos$z.score <- (thesopranos$Rating - mean(thesopranos$Rating))/sd(thesopranos$Rating)
+
+#position for "Season 1" text
+df.summary <- thesopranos %>% group_by(Season) %>% summarise (mean.ep=mean(Episode))
+df.summary$position <- seq(from=7,
+                           to=85,                           
+                           length.out=length(df.summary[[1]]))
+
+df.summary$seasonlabel <- paste("SEASON ", df.summary$Season)
+
+```
+
+
+
+I am rewatching The Sopranos, just in time for the 20 year anniversary. It's always been one of my top TV series ever, but a lot of time has passed. I was worried that it wouldn't hold up. But it's so good, right from the very first episode. It holds up. It might even be better, funnier, and smarter than I realized when I watched it for the first time.
+
+Then I got to the episode "A Hit is a Hit". It's just bad. Meandering plot structure, poor editing, and bad dialogue. I didn't even want to finish it.
+
+
+It recieved an 8.3 on IMDb viewer ratings. I was shocked. **8.3 is not a score for a bad hour of television**. 8.3 should be, objectively, pretty good. 8.3 is something you would recommend and is worth your time. "A Hit is a Hit" is neither of those things. And, objectively, the ratings of the other episodes I watched so far weren't all that different, from 8.6 to 8.9:
+<br><br>
+
+```{r show some ratings, echo=FALSE}
+thesopranos %>%
+  select(Combined, EpisodeName, Rating) %>%
+  filter(Combined<111) %>%
+  rename(Episode = Combined,
+         `Episode Name` = EpisodeName) 
+```
+
+<br>
+A difference of .6 shouldn't be the gap between a bad episode and a really good episode. This is where some statistical analysis can be useful. Here is the the distribution of IMDB viewer rating scores of all the episodes:
+<br>
+
+```{r histogram, echo=FALSE, fig.width=9, fig.height=2, fig.align="center"}
+ggplot(data=thesopranos, aes(x=Rating))+
+  geom_histogram(binwidth=.05,
+                 fill="#F8766D")+
+  labs(title="IMBD Viewer Ratings of The Sopranos Episodes",
+       y="# of Episodes") +
+  nyt_theme() +
+  scale_x_continuous(breaks=seq(8, 10, by=.1))+
+  scale_y_continuous(breaks=seq(0, 18, by=4))+
+  geom_hline(yintercept=0, size=0.4, color="black")+
+  theme(panel.grid.major.x = element_blank())
+```
+
+
+This distribution is roughly [normal](https://en.wikipedia.org/wiki/Normal_distribution) enough for my purpose, which is to make sure I never waste my time watching an episode as bad as "A Hit is a Hit" again. That particular episode was 1.25 standard deviations (SD) lower than the mean rating of all episodes, so I decided to use 1 SD lower than the mean as my cutoff for "bad" episodes. In a perfectly normal dstribution, this means I wouldn't watch 17% of all the episodes. I should remind you that The Sopranos is 86 hours of television. I can live with watching 17% less of it.
+
+##IMDb ratings visualizations
+
+How do I visualize IMDb ratings? I found some nice plots from [u/Pyrolamas](https://www.reddit.com/r/dataisbeautiful/comments/6rzoqw/the_hillenburg_effect_spongebob_squarepants_imdb/) and [u/shivasprogeny](https://www.reddit.com/r/dataisbeautiful/comments/1g7jw2/seinfeld_imdb_episode_ratings_oc/) on reddit that seemed like a good models for me to emulate.
+
+Here's the result. 
+
+
+```{r reddit inspired, echo=FALSE, fig.width=9, fig.height=3, fig.align="center"}
+ggplot(data=thesopranos, aes(x=sequential.spaced, y = Rating, color=Season, label=EpisodeName))+
+  
+  #data points
+  geom_point(
+              aes(color=Season)
+             )+
+  
+  #curve and confidence interval
+  stat_smooth(aes(group=Season),
+               method="loess",
+              size=1,
+              alpha=.2)+
+  
+  #"Season X" labels
+  geom_text(data=df.summary, aes(label=seasonlabel, 
+                                 x=position,
+                                 y=9.5),
+            family="Roboto Condensed", size=4)+
+labs(title="IMDB VIEWER RATINGS FOR THE SOPRANOS")+
+  
+  xlab("Episode")+
+  scale_y_continuous(
+                     breaks=c(0.0:10.0),
+                     limits=c(7.25,10.0))+
+  scale_fill_brewer(palette="Dark2")+
+  nyt_theme()+
+  xfree_theme()+
+  theme(
+        legend.position="none",
+        plot.title=element_text(size=15,
+                                hjust=0.5, 
+                                family="League Spartan", 
+                                color="#9A9A9A" )
+  )
+
+```
+
+Of course, I wanted to apply my criteria for "bad episodes," then highlight and label them. Here is the final product:
+<br><br><br>
+
+```{r low points highlighted, echo=FALSE, fig.width=9, fig.height=4}
+
+ggplot(data=thesopranos, aes(x=sequential.spaced, y = Rating, color=Season, label=EpisodeName))+
+  
+  #the data points
+  geom_point(data=filter(thesopranos,
+                         z.score > -1),
+             color="gray90",
+             size=1
+             ) +
+  
+  #the curves 
+  stat_smooth(
+  aes(group=Season),
+
+            method="loess",
+            size=1,
+            alpha=.1)+
+
+  #horizontal line for 1sd below mean
+  geom_hline(yintercept=mean(thesopranos$Rating)-sd(thesopranos$Rating),
+            color="gray 70",
+            linetype="dashed") +
+
+  #labels for the bad episodes
+  geom_text_repel(
+    data=filter(thesopranos,
+                       z.score < -1),
+    color="black",
+    nudge_y      = -50,
+    direction    = "x",
+    force=.1,
+    angle        = 90,
+    hjust =0.5,
+    segment.size = 0.2,
+    show.legend=FALSE,
+    family="Roboto Condensed",
+    size = 3    
+    )+
+  
+  #highlighted points of the bad episodes
+  geom_point(data=filter(thesopranos,
+                       z.score < -1),
+            aes(color=Season),
+               color="red",
+            size=2,
+            alpha=.4
+           ) +
+  
+  #"Season X" labels
+  geom_text(data=df.summary, aes(label=seasonlabel, 
+                                 x=position,
+                                 y=9.5),
+            family="Roboto Condensed", size=4.5)+
+  
+  #text for 1sd below mean
+  geom_text(label="1 STANDARD DEVIATION BELOW THE MEAN",
+            x=26, y=mean(thesopranos$Rating)-sd(thesopranos$Rating),
+            family="Roboto Condensed", size=3, color="#9A9A9A",
+            hjust=.5,vjust=1.9)+
+
+  labs(title="THE SOPRANOS EPISODES YOU SHOULD JUST SKIP",
+       subtitle="Episodes rated lower than 1 standard deviation below the mean on IMDB")+
+  scale_y_continuous(
+                     breaks=c(0.0:10.0),
+                     limits=c(6,10.0))+
+  scale_fill_brewer(palette="Dark2")+
+  nyt_theme()+
+  xfree_theme()+
+  theme(panel.grid.major.y = element_blank(),
+        legend.position="none",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        plot.title=element_text(size=15,hjust=0.5, family="League Spartan", color="#9A9A9A" ),
+        plot.subtitle=element_text(size=8,hjust=0.5, color="gray60")
+  )
+
+
+
+```
+
+
+```{r SAVE, include=FALSE}
+savescalemultiplier=1
+ggsave(filename = "graphic.png", width=10*savescalemultiplier, height=4*savescalemultiplier, dpi=300, type = "cairo")
+```
+
+```{r normality tests, include=FALSE}
+shapiro.test(thesopranos$Rating)
+qqPlot(thesopranos$Rating)
+```
+
+
+
+```{r BOXPLOT, include=FALSE}
+ggplot(data=thesopranos, aes(x=Season, y = Rating, fill=Season,color=Season))+
+  geom_jitter(aes(color=Season),
+              shape = 21,
+              color="gray85",
+              width=.1,
+              height= .05,
+              size=4,
+              stroke=1,
+              fill="white",
+              alpha=1)+
+  scale_shape_manual(values=c(23))+
+  geom_boxplot(
+               alpha=.1,
+               outlier.shape = NA)+ #no outliers
+  stat_summary(fun.y="mean",fun.ymin = "min", fun.ymax = "max",
+               # color="gray50",
+               size=4,
+               geom="point",
+               shape = 18)+
+
+  theme_bw() +   
+  theme(
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(color = "#E2E2E2",size=.5)
+        # panel.background = element_rect(fill = "white", colour = "grey50")
+        )  
+```
+
+
+```{r ggbetween stats, include=FALSE}
+# ggbetweenstats(data=thesopranos, x=Season, y = Rating)+
+#   theme_bw() +   
+#   theme(
+#         panel.grid.minor = element_blank(),
+#         panel.border = element_blank(),
+#         axis.ticks = element_blank(),
+#         axis.text.x = element_blank(),
+#         axis.title.x = element_blank(),
+#         panel.grid.major.x = element_blank(),
+#         panel.grid.major.y = element_line(color = "#E2E2E2",size=.5)
+#         # panel.background = element_rect(fill = "white", colour = "grey50")
+#         )    
+```
+
